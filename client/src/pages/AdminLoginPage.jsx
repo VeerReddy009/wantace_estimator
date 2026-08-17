@@ -16,7 +16,7 @@ export default function AdminLoginPage() {
     try {
       const response = await loginAdmin(form);
       localStorage.setItem("owner_token", response.token);
-      navigate("/", { replace: true });
+      navigate("/admin", { replace: true });
     } catch (requestError) {
       setError(requestError.message);
     } finally {

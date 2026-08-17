@@ -15,7 +15,7 @@ function RequireAuth({ children }) {
 function RedirectIfAuthenticated({ children }) {
   const token = localStorage.getItem("owner_token");
   if (token) {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/admin" replace />;
   }
 
   return children;
@@ -25,14 +25,7 @@ function App() {
   return (
     <Router>
       <Routes>
-        <Route
-          path="/"
-          element={
-            <RequireAuth>
-              <PublicEstimatorPage />
-            </RequireAuth>
-          }
-        />
+        <Route path="/" element={<PublicEstimatorPage />} />
         <Route
           path="/admin/login"
           element={
