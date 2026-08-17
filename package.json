@@ -1,0 +1,30 @@
+{
+  "name": "wantce",
+  "version": "1.0.0",
+  "description": "Northline Roofing config-driven estimator monorepo",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently \"npm run dev --prefix server\" \"npm run dev --prefix client\"",
+    "dev:server": "npm run dev --prefix server",
+    "dev:client": "npm run dev --prefix client",
+    "build": "npm run build --prefix client",
+    "start": "npm run start --prefix server"
+  },
+  "keywords": [
+    "roofing",
+    "estimator",
+    "monorepo"
+  ],
+  "author": "",
+  "license": "MIT",
+  "workspaces": [
+    "client",
+    "server"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}
