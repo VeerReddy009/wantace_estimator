@@ -1,56 +1,182 @@
 # DECISIONS.md
 
-## 1) Stack and Architecture Decisions
+## 1. Project Overview
 
-- **Frontend:** React + Vite for fast local development and simple deployment to Vercel/Netlify.
-- **Backend:** Node.js + Express for explicit REST route control and easy middleware composition.
-- **Database:** MongoDB + Mongoose for persisted document storage and schema validation.
-- **Auth model:** JWT-based owner auth (`/api/auth/login`) with both bearer token support and an httpOnly cookie for flexibility.
-- **Monorepo layout:** Separate `client` and `server` apps under one root with root scripts for local orchestration.
+The goal is to build a configuration-driven roofing estimator for **Northline Roofing & Exteriors**.
 
-## 2) Pricing Formula (Plain Language)
+The application has two parts:
 
-Inputs are collected from active questions in config.
+* **Public Estimator:** Homeowners answer questions and receive an estimated price range.
+* **Owner Panel:** Dale or Marcus can update pricing, edit questions, and view captured leads.
 
-- `A` = roof area (`roof_area`)
-- `R_m` = selected material `rate_per_sqft`
-- `M_p` = selected pitch `multiplier`
-- `M_s` = selected stories `multiplier`
-- `R_t` = selected layer `tear_off_per_sqft`
-- `W` = waste factor from modifiers (default 0.10)
-- `F_p` = permit flat fee from modifiers (default 350)
-- `S` = estimate spread percentage from modifiers (default 12% -> 0.12)
+The main decision is to keep the **database as the source of truth**. Questions, labels, options, limits, rates, and modifiers are loaded from the API. Nothing that the owner may want to change is hardcoded in the frontend.
 
-Formula:
+The estimate is calculated on the server so users cannot change the pricing logic in the browser.
 
-- Base Material Cost = `A * R_m * (1 + W)`
-- Tear-Off Cost = `A * R_t`
-- Adjusted Subtotal = `(Base Material Cost + Tear-Off Cost) * M_p * M_s`
-- Mid Estimate = `Adjusted Subtotal + F_p`
-- Low Estimate = `Mid * (1 - S)`
-- High Estimate = `Mid * (1 + S)`
+---
 
-All calculation logic is performed **server-side** to avoid browser tampering.
+## 2. Stack and Architecture
 
-## 3) Scope Boundaries
+I used:
 
-Out of scope for assignment timeline:
+* **React + Vite** for the frontend because it is simple and works well for a multi-step estimator.
+* **Node.js + Express** for the backend REST API.
+* **MongoDB + Mongoose** for storing configuration and leads.
+* **JWT authentication** to protect the owner panel.
+* Separate `client` and `server` applications in one repository.
 
-- Multi-role RBAC beyond owner/bookkeeper shared login.
-- Enterprise audit trails and config diff history UI.
-- Multi-tenant company support.
-- SMS/email delivery workflows.
+I kept authentication and roles simple because the assignment does not require complex RBAC.
 
-## 4) Seed Data and Data Normalization
+---
 
-- Seeded initial active config at `config_version = 3`.
-- Intentionally accepted legacy numeric strings (for example `"1.12"`) in the seed payload.
-- Added normalization so option rates, multipliers, min/max, and modifiers are persisted as numbers.
+## 3. Configuration-Driven Design
 
-## 5) Pre-Production Questions for Dale
+The estimator first requests the active configuration from the backend.
 
-- Should estimates expire if rates change after a lead is captured?
-- Is there a minimum project size policy beyond roof area min/max?
-- Should financing options appear as additional config-driven questions?
-- What data retention policy should apply to captured leads?
-- Should admin logins be per-user (Dale vs Marcus) instead of shared credentials?
+The response contains the business details, questions, labels, question types, limits, options, rates, multipliers, and modifiers.
+
+The frontend uses this data to build the form dynamically.
+
+This means Dale can change a question or price without changing frontend code or redeploying the application.
+
+When a question is disabled, it is hidden from new estimator flows rather than deleted, so historical data is not affected.
+
+---
+
+## 4. Configuration Versions
+
+The initial configuration is **version 3**.
+
+Each lead stores the `config_version` used to calculate its estimate. This means old leads keep their original estimate even if pricing changes later.
+
+For example, if the architectural shingle rate changes from `$5.90` to `$7.00`, new estimates use `$7.00`, while existing leads remain unchanged.
+
+A complete configuration history and rollback system was left out because it was not required for the 24-hour assignment.
+
+---
+
+## 5. Pricing Formula
+
+The calculation is performed on the backend.
+
+```text
+Base Material Cost
+= Roof Area × Material Rate × (1 + Waste Factor)
+
+Tear-Off Cost
+= Roof Area × Tear-Off Rate
+
+Adjusted Subtotal
+= (Base Material Cost + Tear-Off Cost)
+  × Pitch Multiplier
+  × Stories Multiplier
+
+Mid Estimate
+= Adjusted Subtotal + Permit Fee
+
+Low Estimate
+= Mid Estimate × (1 - Spread)
+
+High Estimate
+= Mid Estimate × (1 + Spread)
+```
+
+The supplied defaults are:
+
+* Waste factor: `10%`
+* Permit fee: `$350`
+* Spread: `12%`
+
+The final estimates are rounded to whole dollars.
+
+---
+
+## 6. Validation and Seed Data
+
+The backend validates the important inputs instead of trusting the frontend.
+
+It checks required answers, roof-area limits, valid options, and numeric pricing values.
+
+The supplied seed data contains some legacy inconsistencies. For example, the pitch multiplier `"1.12"` is a string even though it represents a number. I normalize numeric configuration values before using them.
+
+There is also an older `config_version = 1` lead containing fields that are not present in version 3. I kept that historical lead unchanged rather than rewriting it.
+
+---
+
+## 7. Live Configuration Changes
+
+Configuration is stored in the database, not in frontend code or a local JSON file.
+
+Therefore, when Dale changes a price, the public estimator can use the updated configuration without a frontend redeployment.
+
+Existing leads keep their original answers and estimates.
+
+A draft/publish workflow could be added later for more control over configuration changes.
+
+---
+
+## 8. Scope Decisions
+
+Because the assignment has a 24-hour limit, I focused on the core workflow:
+
+1. Load configuration.
+2. Display the estimator.
+3. Collect customer details and answers.
+4. Validate the data.
+5. Calculate the estimate on the server.
+6. Store the lead.
+7. Show the estimate.
+8. Manage configuration from the authenticated owner panel.
+9. View captured leads.
+
+I deliberately did not build:
+
+* Complex RBAC
+* Multi-tenancy
+* Enterprise audit logs
+* Configuration rollback UI
+* SMS/email workflows
+* CRM integration
+* Payments
+* Advanced analytics
+* Financing features
+
+I chose to finish the required features properly rather than leave additional features incomplete.
+
+---
+
+## 9. Questions for Dale
+
+Before a production build, I would confirm:
+
+* Should estimates expire when prices change?
+* Is the result a rough estimate or a formal quote?
+* Is there a minimum project size beyond the current roof-area limits?
+* Should financing options be included?
+* Should Dale and Marcus have separate accounts?
+* Should configuration changes have an audit history?
+* Should changes be published immediately or through a draft/publish process?
+* How long should lead data be retained?
+* Should new leads be sent to a CRM or another system?
+
+---
+
+## 10. What I Would Build Next
+
+With another week, I would prioritize:
+
+* Automated tests for the pricing engine.
+* Configuration history and rollback.
+* Draft/publish configuration changes.
+* Separate owner accounts.
+* CSV lead export.
+* Ability to create new questions from the owner panel.
+* Optional webhook/CRM integration.
+
+## Final Decision
+
+The main principle of the project is:
+
+**Keep business configuration in the database and keep pricing logic on the server.**
+
+This allows the business owner to change important values without developer help while keeping the pricing calculation controlled and reliable.
