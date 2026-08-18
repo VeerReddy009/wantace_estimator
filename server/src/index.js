@@ -8,14 +8,25 @@ import router from "./routes/index.js";
 
 const app = express();
 const port = Number(process.env.PORT || 4000);
-const clientUrl = process.env.CLIENT_URL || "http://localhost:5173";
+
+const allowedOrigins = [
+  "http://localhost:5173",
+  "https://wantace-estimator-client.vercel.app",
+];
 
 app.use(
   cors({
-    origin: clientUrl,
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
     credentials: true,
   })
 );
+
 app.use(express.json({ limit: "1mb" }));
 app.use(cookieParser());
 
